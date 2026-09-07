@@ -35,6 +35,8 @@ dependencies {
     implementation(libs.activity.ktx)
     implementation(libs.appcompat)
     implementation(libs.constraintlayout)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.code.gson:gson:2.13.2")
     implementation(libs.material)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
