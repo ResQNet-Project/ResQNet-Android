@@ -1,59 +1,161 @@
 package com.resqnet.app;
 
 import android.Manifest;
-import android.content.pm.PackageManager;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.Toast;
 
-import java.util.UUID;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.navigation.NavigationView;
 import com.google.gson.Gson;
 
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
     private FusedLocationProviderClient fusedLocationClient;
 
+    private DrawerLayout drawerLayout;
+    private NavigationView navigationView;
+    private MaterialToolbar toolbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
- //comment to undertand niggas
 
-        // Connect Android's location service to our app
-        fusedLocationClient =
-                LocationServices.getFusedLocationProviderClient(this);
-
-        // Enable edge-to-edge display
         EdgeToEdge.enable(this);
 
-        // Load activity_main.xml
         setContentView(R.layout.activity_main);
 
 
-        // Find the SOS button from activity_main.xml
+        // =========================
+        // DRAWER
+        // =========================
+
+        drawerLayout = findViewById(R.id.drawerLayout);
+        navigationView = findViewById(R.id.navigationView);
+        toolbar = findViewById(R.id.toolbar);
+
+
+        // Open left drawer
+        toolbar.setNavigationOnClickListener(v -> {
+
+            drawerLayout.openDrawer(navigationView);
+
+        });
+
+
+        // Drawer menu clicks
+        navigationView.setNavigationItemSelectedListener(item -> {
+
+            int id = item.getItemId();
+
+
+            if (id == R.id.nav_home) {
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            else if (id == R.id.nav_notifications) {
+
+                Toast.makeText(
+                        this,
+                        "Notifications / Chat",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            else if (id == R.id.nav_contacts) {
+
+                Toast.makeText(
+                        this,
+                        "Emergency Contacts",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            else if (id == R.id.nav_history) {
+
+                Toast.makeText(
+                        this,
+                        "SOS History",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            else if (id == R.id.nav_settings) {
+
+                Toast.makeText(
+                        this,
+                        "Settings",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            else if (id == R.id.nav_about) {
+
+                Toast.makeText(
+                        this,
+                        "ResQNet",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                drawerLayout.closeDrawer(navigationView);
+
+            }
+
+            return true;
+        });
+
+
+        // =========================
+        // LOCATION
+        // =========================
+
+        fusedLocationClient =
+                LocationServices.getFusedLocationProviderClient(this);
+
+
+        // =========================
+        // SOS BUTTON
+        // =========================
+
         Button btnSOS = findViewById(R.id.btnSOS);
 
 
-        // Run this code when SOS button is clicked
         btnSOS.setOnClickListener(v -> {
 
-            // Check if location permission is granted
+            // Check location permission
             if (ActivityCompat.checkSelfPermission(
                     this,
                     Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED) {
 
-                // Ask the user for location permission
                 ActivityCompat.requestPermissions(
                         this,
                         new String[]{
@@ -66,13 +168,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
 
-            // Get the phone's last known location
+            // Get last known location
             fusedLocationClient.getLastLocation()
                     .addOnSuccessListener(location -> {
 
                         if (location != null) {
 
-                            // Get latitude and longitude
                             double latitude =
                                     location.getLatitude();
 
@@ -80,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
                                     location.getLongitude();
 
 
-                            // Get this phone's unique ID
+                            // Get device ID
                             String senderId =
                                     getResQNetDeviceId();
 
@@ -94,22 +195,20 @@ public class MainActivity extends AppCompatActivity {
                                     );
 
 
-                            // Convert Java object into JSON
+                            // Convert to JSON
                             Gson gson = new Gson();
 
                             String jsonPacket =
                                     gson.toJson(packet);
 
 
-                            // Open local storage
+                            // Save locally
                             SharedPreferences prefs =
                                     getSharedPreferences(
                                             "ResQNet",
                                             MODE_PRIVATE
                                     );
 
-
-                            // Save JSON packet locally
                             prefs.edit()
                                     .putString(
                                             "sos_packet",
@@ -126,24 +225,56 @@ public class MainActivity extends AppCompatActivity {
                                     );
 
 
-                            // Show saved packet on screen
+                            // Show result
                             Toast.makeText(
                                     this,
                                     savedPacket,
                                     Toast.LENGTH_LONG
                             ).show();
+
+                        }
+
+                        else {
+
+                            Toast.makeText(
+                                    this,
+                                    "Unable to get location",
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
                         }
 
                     });
+
         });
+        // =========================
+// ADD MESSAGE
+// =========================
+
+        Button btnAddMessage =
+                findViewById(R.id.btnAddMessage);
+
+        btnAddMessage.setOnClickListener(v -> {
+
+            Intent intent =
+                    new Intent(
+                            MainActivity.this,
+                            AddMessageActivity.class
+                    );
+
+            startActivity(intent);
+
+        });
+
     }
 
 
-    // Get existing device ID
-    // OR create a new one if this is the first time
+    // =========================
+    // DEVICE ID
+    // =========================
+
     private String getResQNetDeviceId() {
 
-        // Open ResQNet local storage
         SharedPreferences prefs =
                 getSharedPreferences(
                         "ResQNet",
@@ -151,7 +282,6 @@ public class MainActivity extends AppCompatActivity {
                 );
 
 
-        // Try to get an existing device ID
         String deviceId =
                 prefs.getString(
                         "device_id",
@@ -159,24 +289,22 @@ public class MainActivity extends AppCompatActivity {
                 );
 
 
-        // If no device ID exists, create one
         if (deviceId == null) {
 
             deviceId =
                     UUID.randomUUID().toString();
 
 
-            // Save the generated device ID
             prefs.edit()
                     .putString(
                             "device_id",
                             deviceId
                     )
                     .apply();
+
         }
 
 
-        // Return the device ID
         return deviceId;
     }
 }
