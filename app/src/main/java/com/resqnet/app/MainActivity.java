@@ -8,6 +8,13 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.Toast;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -22,6 +29,8 @@ import com.google.gson.Gson;
 
 import java.util.UUID;
 
+import com.resqnet.app.nearby.NearbyManager;
+
 public class MainActivity extends AppCompatActivity {
 
     private FusedLocationProviderClient fusedLocationClient;
@@ -29,6 +38,10 @@ public class MainActivity extends AppCompatActivity {
     private DrawerLayout drawerLayout;
     private NavigationView navigationView;
     private MaterialToolbar toolbar;
+
+
+
+    private NearbyManager nearbyManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,8 +51,16 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
 
         setContentView(R.layout.activity_main);
+        nearbyManager = new NearbyManager(this);
+        if (!nearbyManager.hasNearbyPermissions()) {
 
+            nearbyManager.requestNearbyPermissions();
 
+        } else {
+
+            nearbyManager.startAdvertising();
+            nearbyManager.startDiscovery();
+        }
         // =========================
         // DRAWER
         // =========================
@@ -306,5 +327,42 @@ public class MainActivity extends AppCompatActivity {
 
 
         return deviceId;
+    }
+
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults) {
+
+        super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+        );
+
+        if (requestCode == 200) {
+
+            if (nearbyManager.hasNearbyPermissions()) {
+
+                Toast.makeText(
+                        this,
+                        "Nearby permissions granted",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                nearbyManager.startAdvertising();
+                nearbyManager.startDiscovery();
+
+            } else {
+
+                Toast.makeText(
+                        this,
+                        "Nearby permissions denied",
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+        }
     }
 }
