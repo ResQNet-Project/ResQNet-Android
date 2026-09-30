@@ -25,11 +25,18 @@ import com.google.android.gms.nearby.connection.Payload;
 import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo;
 import com.google.android.gms.nearby.connection.DiscoveryOptions;
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback;
+
+import java.util.HashSet;
+import java.util.Set;
+import com.google.gson.Gson;
+import com.resqnet.app.SOSPacket;
 public class NearbyManager {
 
     private Activity activity;
     private ConnectionsClient connectionsClient;
     private static final String SERVICE_ID = "com.resqnet.app";
+
+    private final Set<String> connectedEndpoints = new HashSet<>();
     public NearbyManager(Activity activity) {
 
         this.activity = activity;
@@ -80,19 +87,73 @@ public class NearbyManager {
             new PayloadCallback() {
 
                 @Override
-                public void onPayloadReceived(
-                        String endpointId,
-                        Payload payload) {
+                public void onPayloadReceived(String endpointId, Payload payload) {
 
-                    if (payload.getType() == Payload.Type.BYTES) {
+                    if (payload.getType() != Payload.Type.BYTES) {
+                        return;
+                    }
 
-                        String message =
-                                new String(payload.asBytes());
+                    String json = new String(payload.asBytes());
+
+                    Gson gson = new Gson();
+
+                    try {
+
+                        SOSPacket packet = gson.fromJson(json, SOSPacket.class);
+
+                        String messageId = packet.getMessageId();
+
+                        // Check whether we have already seen this SOS
+                        android.content.SharedPreferences prefs =
+                                activity.getSharedPreferences(
+                                        "ResQNet",
+                                        android.content.Context.MODE_PRIVATE
+                                );
+
+                        String seenKey = "seen_" + messageId;
+
+                        if (prefs.getBoolean(seenKey, false)) {
+
+                            Toast.makeText(
+                                    activity,
+                                    "Duplicate SOS ignored",
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            return;
+                        }
+
+                        // Mark this SOS as seen
+                        prefs.edit()
+                                .putBoolean(seenKey, true)
+                                .apply();
+
+                        // Increase hop count
+                        packet.incrementHopCount();
+
+                        // Store received SOS locally
+                        String updatedJson = gson.toJson(packet);
+
+                        prefs.edit()
+                                .putString("sos_packet", updatedJson)
+                                .apply();
 
                         Toast.makeText(
                                 activity,
-                                "Received: " + message,
+                                "SOS received! Hop: "
+                                        + packet.getHopCount(),
                                 Toast.LENGTH_LONG
+                        ).show();
+
+                        // Forward to other connected devices
+                        forwardSOS(packet, endpointId);
+
+                    } catch (Exception e) {
+
+                        Toast.makeText(
+                                activity,
+                                "Invalid SOS packet",
+                                Toast.LENGTH_SHORT
                         ).show();
                     }
                 }
@@ -101,11 +162,8 @@ public class NearbyManager {
                 public void onPayloadTransferUpdate(
                         String endpointId,
                         PayloadTransferUpdate update) {
-
-                    // We will handle transfer status here later
                 }
             };
-
     private final EndpointDiscoveryCallback endpointDiscoveryCallback =
             new EndpointDiscoveryCallback() {
 
@@ -221,14 +279,9 @@ public class NearbyManager {
                         ).show();
 
                         Payload payload =
-                                Payload.fromBytes(
-                                        "HELLO FROM RESQNET".getBytes()
-                                );
+                                Payload.fromBytes("HELLO FROM RESQNET".getBytes());
 
-                        connectionsClient.sendPayload(
-                                endpointId,
-                                payload
-                        );
+                        connectionsClient.sendPayload(endpointId, payload);
                     }else {
 
                         Toast.makeText(
@@ -241,6 +294,8 @@ public class NearbyManager {
 
                 @Override
                 public void onDisconnected(String endpointId) {
+
+                    connectedEndpoints.remove(endpointId);
 
                     Toast.makeText(
                             activity,
@@ -264,5 +319,70 @@ public class NearbyManager {
                     200
             );
         }
+    }
+
+    private void forwardSOS(SOSPacket packet, String receivedFromEndpoint) {
+
+        Gson gson = new Gson();
+
+        String json = gson.toJson(packet);
+
+        Payload payload = Payload.fromBytes(
+                json.getBytes()
+        );
+
+        for (String endpointId : connectedEndpoints) {
+
+            // Don't immediately send it back to the phone
+            // that sent it to us.
+            if (endpointId.equals(receivedFromEndpoint)) {
+                continue;
+            }
+
+            connectionsClient.sendPayload(
+                    endpointId,
+                    payload
+            );
+        }
+
+        Toast.makeText(
+                activity,
+                "SOS forwarded. Hop: " + packet.getHopCount(),
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+    public void sendSOS(SOSPacket packet) {
+
+        Gson gson = new Gson();
+
+        String json = gson.toJson(packet);
+
+        Payload payload =
+                Payload.fromBytes(json.getBytes());
+
+        if (connectedEndpoints.isEmpty()) {
+
+            Toast.makeText(
+                    activity,
+                    "No ResQNet devices connected",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+        for (String endpointId : connectedEndpoints) {
+
+            connectionsClient.sendPayload(
+                    endpointId,
+                    payload
+            );
+        }
+
+        Toast.makeText(
+                activity,
+                "SOS sent to nearby devices",
+                Toast.LENGTH_SHORT
+        ).show();
     }
 }

@@ -236,8 +236,13 @@ public class MainActivity extends AppCompatActivity {
                                             jsonPacket
                                     )
                                     .apply();
-
-
+                            prefs.edit()
+                                    .putBoolean(
+                                            "seen_" + packet.getMessageId(),
+                                            true
+                                    )
+                                    .apply();
+                            nearbyManager.sendSOS(packet);//sended
                             // Read saved packet
                             String savedPacket =
                                     prefs.getString(

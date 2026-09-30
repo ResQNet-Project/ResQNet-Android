@@ -59,4 +59,9 @@ public class SOSPacket {
     public int getHopCount() {
         return hopCount;
     }
+
+
+    public void incrementHopCount() {
+        hopCount++;
+    }
 }
