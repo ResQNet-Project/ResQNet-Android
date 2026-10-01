@@ -15,53 +15,98 @@ public class SOSPacket {
 
     private int hopCount;
 
+
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
     public SOSPacket(
             String senderId,
             double latitude,
             double longitude
     ) {
-        this.messageId = UUID.randomUUID().toString();
-        this.senderId = senderId;
-        this.type = "SOS";
 
-        this.latitude = latitude;
-        this.longitude = longitude;
+        // Unique ID for this SOS
+        this.messageId =
+                UUID.randomUUID().toString();
 
-        this.timestamp = System.currentTimeMillis();
+        // Device that originally created the SOS
+        this.senderId =
+                senderId;
 
-        this.hopCount = 0;
+        // Message type
+        this.type =
+                "SOS";
+
+        // GPS location
+        this.latitude =
+                latitude;
+
+        this.longitude =
+                longitude;
+
+        // Creation time
+        this.timestamp =
+                System.currentTimeMillis();
+
+        // Original message starts at hop 0
+        this.hopCount =
+                0;
     }
 
+
+    // =========================================================
+    // GETTERS
+    // =========================================================
+
     public String getMessageId() {
+
         return messageId;
     }
 
+
     public String getSenderId() {
+
         return senderId;
     }
 
+
     public String getType() {
+
         return type;
     }
 
+
     public double getLatitude() {
+
         return latitude;
     }
 
+
     public double getLongitude() {
+
         return longitude;
     }
 
+
     public long getTimestamp() {
+
         return timestamp;
     }
 
+
     public int getHopCount() {
+
         return hopCount;
     }
 
 
+    // =========================================================
+    // INCREASE HOP COUNT
+    // =========================================================
+
     public void incrementHopCount() {
+
         hopCount++;
     }
 }

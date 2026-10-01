@@ -8,14 +8,6 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.Toast;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
-
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
-
-
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -26,12 +18,16 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.navigation.NavigationView;
 import com.google.gson.Gson;
-
-import java.util.UUID;
-
 import com.resqnet.app.nearby.NearbyManager;
 
+import java.util.ArrayList;
+import java.util.UUID;
+
 public class MainActivity extends AppCompatActivity {
+
+    // =========================================================
+    // VARIABLES
+    // =========================================================
 
     private FusedLocationProviderClient fusedLocationClient;
 
@@ -39,9 +35,14 @@ public class MainActivity extends AppCompatActivity {
     private NavigationView navigationView;
     private MaterialToolbar toolbar;
 
-
-
     private NearbyManager nearbyManager;
+
+    private static final int REQUEST_ALL_PERMISSIONS = 200;
+
+
+    // =========================================================
+    // ON CREATE
+    // =========================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,26 +52,52 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
 
         setContentView(R.layout.activity_main);
-        nearbyManager = new NearbyManager(this);
-        if (!nearbyManager.hasNearbyPermissions()) {
 
-            nearbyManager.requestNearbyPermissions();
+
+        // =====================================================
+        // NEARBY MANAGER
+        // =====================================================
+
+        nearbyManager = new NearbyManager(this);
+
+
+        // =====================================================
+        // LOCATION CLIENT
+        // =====================================================
+
+        fusedLocationClient =
+                LocationServices.getFusedLocationProviderClient(this);
+
+
+        // =====================================================
+        // PERMISSIONS
+        // =====================================================
+
+        if (hasAllRequiredPermissions()) {
+
+            startNearby();
 
         } else {
 
-            nearbyManager.startAdvertising();
-            nearbyManager.startDiscovery();
+            requestAllPermissions();
         }
-        // =========================
+
+
+        // =====================================================
         // DRAWER
-        // =========================
+        // =====================================================
 
-        drawerLayout = findViewById(R.id.drawerLayout);
-        navigationView = findViewById(R.id.navigationView);
-        toolbar = findViewById(R.id.toolbar);
+        drawerLayout =
+                findViewById(R.id.drawerLayout);
+
+        navigationView =
+                findViewById(R.id.navigationView);
+
+        toolbar =
+                findViewById(R.id.toolbar);
 
 
-        // Open left drawer
+        // Open drawer
         toolbar.setNavigationOnClickListener(v -> {
 
             drawerLayout.openDrawer(navigationView);
@@ -78,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        // Drawer menu clicks
+        // Drawer menu
         navigationView.setNavigationItemSelectedListener(item -> {
 
             int id = item.getItemId();
@@ -87,8 +114,8 @@ public class MainActivity extends AppCompatActivity {
             if (id == R.id.nav_home) {
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             else if (id == R.id.nav_notifications) {
 
@@ -99,8 +126,8 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             else if (id == R.id.nav_contacts) {
 
@@ -111,8 +138,8 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             else if (id == R.id.nav_history) {
 
@@ -123,8 +150,8 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             else if (id == R.id.nav_settings) {
 
@@ -135,8 +162,8 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             else if (id == R.id.nav_about) {
 
@@ -147,67 +174,95 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
 
                 drawerLayout.closeDrawer(navigationView);
-
             }
+
 
             return true;
         });
 
 
-        // =========================
-        // LOCATION
-        // =========================
-
-        fusedLocationClient =
-                LocationServices.getFusedLocationProviderClient(this);
-
-
-        // =========================
+        // =====================================================
         // SOS BUTTON
-        // =========================
+        // =====================================================
 
-        Button btnSOS = findViewById(R.id.btnSOS);
+        Button btnSOS =
+                findViewById(R.id.btnSOS);
 
 
         btnSOS.setOnClickListener(v -> {
 
-            // Check location permission
-            if (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED) {
 
-                ActivityCompat.requestPermissions(
+            // =================================================
+            // CHECK LOCATION PERMISSION
+            // =================================================
+
+            boolean fineLocation =
+                    ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED;
+
+
+            boolean coarseLocation =
+                    ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED;
+
+
+            // Accept either FINE or COARSE location
+            if (!fineLocation && !coarseLocation) {
+
+                Toast.makeText(
                         this,
-                        new String[]{
-                                Manifest.permission.ACCESS_FINE_LOCATION
-                        },
-                        100
-                );
+                        "Location permission is required",
+                        Toast.LENGTH_SHORT
+                ).show();
 
                 return;
             }
 
 
-            // Get last known location
-            fusedLocationClient.getLastLocation()
+            // =================================================
+            // GET LOCATION
+            // =================================================
+
+            fusedLocationClient
+                    .getLastLocation()
                     .addOnSuccessListener(location -> {
+
 
                         if (location != null) {
 
+
+                            // =================================
+                            // GET LATITUDE
+                            // =================================
+
                             double latitude =
                                     location.getLatitude();
+
+
+                            // =================================
+                            // GET LONGITUDE
+                            // =================================
 
                             double longitude =
                                     location.getLongitude();
 
 
-                            // Get device ID
+                            // =================================
+                            // DEVICE ID
+                            // =================================
+
                             String senderId =
                                     getResQNetDeviceId();
 
 
-                            // Create SOS packet
+                            // =================================
+                            // CREATE SOS PACKET
+                            // =================================
+
                             SOSPacket packet =
                                     new SOSPacket(
                                             senderId,
@@ -216,34 +271,52 @@ public class MainActivity extends AppCompatActivity {
                                     );
 
 
-                            // Convert to JSON
-                            Gson gson = new Gson();
+                            // =================================
+                            // CONVERT SOS TO JSON
+                            // =================================
+
+                            Gson gson =
+                                    new Gson();
 
                             String jsonPacket =
                                     gson.toJson(packet);
 
 
-                            // Save locally
+                            // =================================
+                            // LOCAL STORAGE
+                            // =================================
+
                             SharedPreferences prefs =
                                     getSharedPreferences(
                                             "ResQNet",
                                             MODE_PRIVATE
                                     );
 
+
                             prefs.edit()
                                     .putString(
                                             "sos_packet",
                                             jsonPacket
                                     )
-                                    .apply();
-                            prefs.edit()
                                     .putBoolean(
-                                            "seen_" + packet.getMessageId(),
+                                            "seen_" +
+                                                    packet.getMessageId(),
                                             true
                                     )
                                     .apply();
-                            nearbyManager.sendSOS(packet);//sended
-                            // Read saved packet
+
+
+                            // =================================
+                            // SEND THROUGH NEARBY
+                            // =================================
+
+                            nearbyManager.sendSOS(packet);
+
+
+                            // =================================
+                            // READ SAVED PACKET
+                            // =================================
+
                             String savedPacket =
                                     prefs.getString(
                                             "sos_packet",
@@ -251,7 +324,10 @@ public class MainActivity extends AppCompatActivity {
                                     );
 
 
-                            // Show result
+                            // =================================
+                            // SHOW SOS
+                            // =================================
+
                             Toast.makeText(
                                     this,
                                     savedPacket,
@@ -267,18 +343,30 @@ public class MainActivity extends AppCompatActivity {
                                     "Unable to get location",
                                     Toast.LENGTH_SHORT
                             ).show();
-
                         }
+
+                    })
+                    .addOnFailureListener(e -> {
+
+                        Toast.makeText(
+                                this,
+                                "Location error: "
+                                        + e.getMessage(),
+                                Toast.LENGTH_LONG
+                        ).show();
 
                     });
 
         });
-        // =========================
-// ADD MESSAGE
-// =========================
+
+
+        // =====================================================
+        // ADD MESSAGE BUTTON
+        // =====================================================
 
         Button btnAddMessage =
                 findViewById(R.id.btnAddMessage);
+
 
         btnAddMessage.setOnClickListener(v -> {
 
@@ -295,11 +383,266 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    // =========================
+    // =========================================================
+    // CHECK ALL REQUIRED RUNTIME PERMISSIONS
+    // =========================================================
+
+    private boolean hasAllRequiredPermissions() {
+
+
+        // =====================================================
+        // LOCATION
+        // =====================================================
+
+        boolean fineLocation =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED;
+
+
+        boolean coarseLocation =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED;
+
+
+        if (!fineLocation && !coarseLocation) {
+
+            return false;
+        }
+
+
+        // =====================================================
+        // BLUETOOTH - ANDROID 12+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+        }
+
+
+        // =====================================================
+        // NEARBY WIFI - ANDROID 13+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.NEARBY_WIFI_DEVICES
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+        }
+
+
+        // =====================================================
+        // LOCAL NETWORK - ANDROID 17+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 37) {
+
+
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_LOCAL_NETWORK
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+        }
+
+
+        return true;
+    }
+
+
+    // =========================================================
+    // REQUEST ALL PERMISSIONS
+    // ONLY ONE REQUEST IS MADE
+    // =========================================================
+
+    private void requestAllPermissions() {
+
+
+        ArrayList<String> permissions =
+                new ArrayList<>();
+
+
+        // =====================================================
+        // LOCATION
+        // =====================================================
+
+        permissions.add(
+                Manifest.permission.ACCESS_FINE_LOCATION
+        );
+
+        permissions.add(
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        );
+
+
+        // =====================================================
+        // BLUETOOTH - ANDROID 12+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_SCAN
+            );
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_CONNECT
+            );
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+            );
+        }
+
+
+        // =====================================================
+        // NEARBY WIFI - ANDROID 13+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+
+            permissions.add(
+                    Manifest.permission.NEARBY_WIFI_DEVICES
+            );
+        }
+
+
+        // =====================================================
+        // LOCAL NETWORK - ANDROID 17+
+        // =====================================================
+
+        if (android.os.Build.VERSION.SDK_INT >= 37) {
+
+            permissions.add(
+                    Manifest.permission.ACCESS_LOCAL_NETWORK
+            );
+        }
+
+
+        // =====================================================
+        // ONE REQUEST ONLY
+        // =====================================================
+
+        ActivityCompat.requestPermissions(
+                this,
+                permissions.toArray(
+                        new String[0]
+                ),
+                REQUEST_ALL_PERMISSIONS
+        );
+    }
+
+
+    // =========================================================
+    // START NEARBY
+    // =========================================================
+
+    private void startNearby() {
+
+        nearbyManager.startAdvertising();
+
+        nearbyManager.startDiscovery();
+    }
+
+
+    // =========================================================
+    // PERMISSION RESULT
+    // =========================================================
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+
+        super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+        );
+
+
+        if (requestCode == REQUEST_ALL_PERMISSIONS) {
+
+
+            // ================================================
+            // CHECK AGAIN
+            // ================================================
+
+            if (hasAllRequiredPermissions()) {
+
+
+                Toast.makeText(
+                        this,
+                        "All permissions granted",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+
+                // ============================================
+                // START NEARBY
+                // ============================================
+
+                startNearby();
+
+            }
+
+            else {
+
+                Toast.makeText(
+                        this,
+                        "Required permissions denied",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        }
+    }
+
+
+    // =========================================================
     // DEVICE ID
-    // =========================
+    // =========================================================
 
     private String getResQNetDeviceId() {
+
 
         SharedPreferences prefs =
                 getSharedPreferences(
@@ -317,6 +660,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (deviceId == null) {
 
+
             deviceId =
                     UUID.randomUUID().toString();
 
@@ -327,47 +671,9 @@ public class MainActivity extends AppCompatActivity {
                             deviceId
                     )
                     .apply();
-
         }
 
 
         return deviceId;
-    }
-
-
-    @Override
-    public void onRequestPermissionsResult(
-            int requestCode,
-            String[] permissions,
-            int[] grantResults) {
-
-        super.onRequestPermissionsResult(
-                requestCode,
-                permissions,
-                grantResults
-        );
-
-        if (requestCode == 200) {
-
-            if (nearbyManager.hasNearbyPermissions()) {
-
-                Toast.makeText(
-                        this,
-                        "Nearby permissions granted",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-                nearbyManager.startAdvertising();
-                nearbyManager.startDiscovery();
-
-            } else {
-
-                Toast.makeText(
-                        this,
-                        "Nearby permissions denied",
-                        Toast.LENGTH_SHORT
-                ).show();
-            }
-        }
     }
 }

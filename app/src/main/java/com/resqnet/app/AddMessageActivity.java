@@ -20,13 +20,26 @@ import java.util.UUID;
 
 public class AddMessageActivity extends AppCompatActivity {
 
+    // =========================================================
+    // VARIABLES
+    // =========================================================
+
     private FusedLocationProviderClient fusedLocationClient;
 
     private TextInputEditText etMessage;
+
     private TextView tvLocationStatus;
+
     private MaterialButton btnSendMessage;
 
+
+    // Permission request code
     private static final int LOCATION_PERMISSION_REQUEST = 101;
+
+
+    // =========================================================
+    // ON CREATE
+    // =========================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,7 +48,13 @@ public class AddMessageActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_add_message);
 
-        etMessage = findViewById(R.id.etMessage);
+
+        // =====================================================
+        // FIND VIEWS
+        // =====================================================
+
+        etMessage =
+                findViewById(R.id.etMessage);
 
         tvLocationStatus =
                 findViewById(R.id.tvLocationStatus);
@@ -43,8 +62,20 @@ public class AddMessageActivity extends AppCompatActivity {
         btnSendMessage =
                 findViewById(R.id.btnSendMessage);
 
+
+        // =====================================================
+        // LOCATION CLIENT
+        // =====================================================
+
         fusedLocationClient =
-                LocationServices.getFusedLocationProviderClient(this);
+                LocationServices.getFusedLocationProviderClient(
+                        this
+                );
+
+
+        // =====================================================
+        // SEND BUTTON
+        // =====================================================
 
         btnSendMessage.setOnClickListener(v -> {
 
@@ -54,12 +85,26 @@ public class AddMessageActivity extends AppCompatActivity {
     }
 
 
+    // =========================================================
+    // SEND EMERGENCY MESSAGE
+    // =========================================================
+
     private void sendEmergencyMessage() {
 
+        // =====================================================
+        // GET MESSAGE
+        // =====================================================
+
         String message =
-                etMessage.getText()
+                etMessage
+                        .getText()
                         .toString()
                         .trim();
+
+
+        // =====================================================
+        // CHECK EMPTY MESSAGE
+        // =====================================================
 
         if (message.isEmpty()) {
 
@@ -71,15 +116,32 @@ public class AddMessageActivity extends AppCompatActivity {
         }
 
 
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-        ) != PackageManager.PERMISSION_GRANTED) {
+        // =====================================================
+        // CHECK LOCATION PERMISSION
+        // =====================================================
+
+        boolean fineLocation =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED;
+
+
+        boolean coarseLocation =
+                ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED;
+
+
+        // Accept either Fine OR Coarse
+        if (!fineLocation && !coarseLocation) {
 
             ActivityCompat.requestPermissions(
                     this,
                     new String[]{
-                            Manifest.permission.ACCESS_FINE_LOCATION
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
                     },
                     LOCATION_PERMISSION_REQUEST
             );
@@ -87,6 +149,10 @@ public class AddMessageActivity extends AppCompatActivity {
             return;
         }
 
+
+        // =====================================================
+        // GET LOCATION
+        // =====================================================
 
         tvLocationStatus.setText(
                 "📍 Getting your location..."
@@ -97,11 +163,17 @@ public class AddMessageActivity extends AppCompatActivity {
                 .getLastLocation()
                 .addOnSuccessListener(location -> {
 
+
+                    // =================================================
+                    // LOCATION NOT AVAILABLE
+                    // =================================================
+
                     if (location == null) {
 
                         tvLocationStatus.setText(
                                 "❌ Unable to get your location"
                         );
+
 
                         Toast.makeText(
                                 this,
@@ -109,25 +181,43 @@ public class AddMessageActivity extends AppCompatActivity {
                                 Toast.LENGTH_SHORT
                         ).show();
 
+
                         return;
                     }
 
 
+                    // =================================================
+                    // GET COORDINATES
+                    // =================================================
+
                     double latitude =
                             location.getLatitude();
+
 
                     double longitude =
                             location.getLongitude();
 
+
+                    // =================================================
+                    // UPDATE UI
+                    // =================================================
 
                     tvLocationStatus.setText(
                             "📍 Location attached"
                     );
 
 
+                    // =================================================
+                    // GET DEVICE ID
+                    // =================================================
+
                     String senderId =
                             getResQNetDeviceId();
 
+
+                    // =================================================
+                    // CREATE SOS PACKET
+                    // =================================================
 
                     SOSPacket packet =
                             new SOSPacket(
@@ -137,12 +227,21 @@ public class AddMessageActivity extends AppCompatActivity {
                             );
 
 
+                    // =================================================
+                    // CONVERT PACKET TO JSON
+                    // =================================================
+
                     Gson gson =
                             new Gson();
+
 
                     String jsonPacket =
                             gson.toJson(packet);
 
+
+                    // =================================================
+                    // SAVE TO SHARED PREFERENCES
+                    // =================================================
 
                     SharedPreferences prefs =
                             getSharedPreferences(
@@ -163,6 +262,10 @@ public class AddMessageActivity extends AppCompatActivity {
                             .apply();
 
 
+                    // =================================================
+                    // SHOW SUCCESS
+                    // =================================================
+
                     Toast.makeText(
                             this,
                             "Emergency message saved",
@@ -170,11 +273,35 @@ public class AddMessageActivity extends AppCompatActivity {
                     ).show();
 
 
+                    // =================================================
+                    // CLOSE ACTIVITY
+                    // =================================================
+
                     finish();
+
+                })
+
+                .addOnFailureListener(e -> {
+
+                    tvLocationStatus.setText(
+                            "❌ Unable to get your location"
+                    );
+
+
+                    Toast.makeText(
+                            this,
+                            "Location error: "
+                                    + e.getMessage(),
+                            Toast.LENGTH_LONG
+                    ).show();
 
                 });
     }
 
+
+    // =========================================================
+    // GET RESQNET DEVICE ID
+    // =========================================================
 
     private String getResQNetDeviceId() {
 
@@ -184,16 +311,24 @@ public class AddMessageActivity extends AppCompatActivity {
                         MODE_PRIVATE
                 );
 
+
         String deviceId =
                 prefs.getString(
                         "device_id",
                         null
                 );
 
+
+        // =====================================================
+        // CREATE DEVICE ID IF NEEDED
+        // =====================================================
+
         if (deviceId == null) {
 
             deviceId =
-                    UUID.randomUUID().toString();
+                    UUID.randomUUID()
+                            .toString();
+
 
             prefs.edit()
                     .putString(
@@ -203,15 +338,21 @@ public class AddMessageActivity extends AppCompatActivity {
                     .apply();
         }
 
+
         return deviceId;
     }
 
+
+    // =========================================================
+    // PERMISSION RESULT
+    // =========================================================
 
     @Override
     public void onRequestPermissionsResult(
             int requestCode,
             String[] permissions,
-            int[] grantResults) {
+            int[] grantResults
+    ) {
 
         super.onRequestPermissionsResult(
                 requestCode,
@@ -219,16 +360,44 @@ public class AddMessageActivity extends AppCompatActivity {
                 grantResults
         );
 
+
+        // =====================================================
+        // LOCATION PERMISSION RESULT
+        // =====================================================
+
         if (requestCode ==
                 LOCATION_PERMISSION_REQUEST) {
 
-            if (grantResults.length > 0 &&
-                    grantResults[0] ==
-                            PackageManager.PERMISSION_GRANTED) {
+
+            boolean fineLocation =
+                    ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED;
+
+
+            boolean coarseLocation =
+                    ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED;
+
+
+            // =================================================
+            // PERMISSION GRANTED
+            // =================================================
+
+            if (fineLocation || coarseLocation) {
 
                 sendEmergencyMessage();
 
-            } else {
+            }
+
+            // =================================================
+            // PERMISSION DENIED
+            // =================================================
+
+            else {
 
                 Toast.makeText(
                         this,

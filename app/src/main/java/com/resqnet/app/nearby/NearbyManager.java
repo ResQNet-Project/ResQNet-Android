@@ -1,343 +1,748 @@
 package com.resqnet.app.nearby;
 
 import android.Manifest;
-import android.widget.Toast;
 import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import com.google.android.gms.nearby.connection.ConnectionsStatusCodes;
-import androidx.core.app.ActivityCompat;
-import com.google.android.gms.nearby.Nearby;
-import com.google.android.gms.nearby.connection.ConnectionsClient;
-import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback;
-import com.google.android.gms.nearby.connection.Payload;
-import com.google.android.gms.nearby.connection.PayloadCallback;
-import com.google.android.gms.nearby.connection.PayloadTransferUpdate;
+import android.os.Build;
+import android.widget.Toast;
 
+import androidx.core.app.ActivityCompat;
+
+import com.google.android.gms.nearby.Nearby;
 import com.google.android.gms.nearby.connection.AdvertisingOptions;
 import com.google.android.gms.nearby.connection.ConnectionInfo;
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback;
 import com.google.android.gms.nearby.connection.ConnectionResolution;
-import com.google.android.gms.nearby.connection.Strategy;
-
-import com.google.android.gms.nearby.connection.Payload;
-
-
+import com.google.android.gms.nearby.connection.ConnectionsClient;
+import com.google.android.gms.nearby.connection.ConnectionsStatusCodes;
 import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo;
 import com.google.android.gms.nearby.connection.DiscoveryOptions;
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback;
-
-import java.util.HashSet;
-import java.util.Set;
+import com.google.android.gms.nearby.connection.Payload;
+import com.google.android.gms.nearby.connection.PayloadCallback;
+import com.google.android.gms.nearby.connection.PayloadTransferUpdate;
+import com.google.android.gms.nearby.connection.Strategy;
 import com.google.gson.Gson;
 import com.resqnet.app.SOSPacket;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+
 public class NearbyManager {
 
-    private Activity activity;
-    private ConnectionsClient connectionsClient;
-    private static final String SERVICE_ID = "com.resqnet.app";
+    // =========================================================
+    // CONSTANTS
+    // =========================================================
 
-    private final Set<String> connectedEndpoints = new HashSet<>();
+    private static final String SERVICE_ID =
+            "com.resqnet.app";
+
+    private static final String PREFS_NAME =
+            "ResQNet";
+
+    private static final String LOCAL_NETWORK_PERMISSION =
+            "android.permission.ACCESS_LOCAL_NETWORK";
+
+
+    // =========================================================
+    // VARIABLES
+    // =========================================================
+
+    private final Activity activity;
+
+    private final ConnectionsClient connectionsClient;
+
+    private final Gson gson =
+            new Gson();
+
+
+    // Currently connected devices
+    private final Set<String> connectedEndpoints =
+            new HashSet<>();
+
+
+    // Devices for which connection request is in progress
+    private final Set<String> pendingEndpoints =
+            new HashSet<>();
+
+
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
     public NearbyManager(Activity activity) {
 
         this.activity = activity;
 
-        connectionsClient =
+        this.connectionsClient =
                 Nearby.getConnectionsClient(activity);
     }
 
+
+    // =========================================================
+    // PERMISSIONS
+    // =========================================================
+
+    private boolean granted(String permission) {
+
+        return ActivityCompat.checkSelfPermission(
+                activity,
+                permission
+        ) == PackageManager.PERMISSION_GRANTED;
+    }
+
+
     public boolean hasNearbyPermissions() {
 
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
+        // -----------------------------------------------------
+        // Android 11 and below
+        // -----------------------------------------------------
 
-            boolean bluetoothPermissions =
-                    ActivityCompat.checkSelfPermission(
-                            activity,
-                            Manifest.permission.BLUETOOTH_SCAN
-                    ) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT <= 31) {
 
-                            && ActivityCompat.checkSelfPermission(
-                            activity,
-                            Manifest.permission.BLUETOOTH_CONNECT
-                    ) == PackageManager.PERMISSION_GRANTED
+            if (!granted(
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            )) {
 
-                            && ActivityCompat.checkSelfPermission(
-                            activity,
-                            Manifest.permission.BLUETOOTH_ADVERTISE
-                    ) == PackageManager.PERMISSION_GRANTED;
-
-            if (!bluetoothPermissions) {
                 return false;
             }
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= 32) {
 
-            if (ActivityCompat.checkSelfPermission(
-                    activity,
+        // -----------------------------------------------------
+        // Bluetooth - Android 12+
+        // -----------------------------------------------------
+
+        if (Build.VERSION.SDK_INT >= 31) {
+
+            if (!granted(
+                    Manifest.permission.BLUETOOTH_SCAN
+            )
+                    || !granted(
+                    Manifest.permission.BLUETOOTH_CONNECT
+            )
+                    || !granted(
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+            )) {
+
+                return false;
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // Nearby Wi-Fi Devices - Android 13+
+        // -----------------------------------------------------
+
+        if (Build.VERSION.SDK_INT >= 33) {
+
+            if (!granted(
                     Manifest.permission.NEARBY_WIFI_DEVICES
-            ) != PackageManager.PERMISSION_GRANTED) {
+            )) {
 
                 return false;
             }
         }
+
+
+        // -----------------------------------------------------
+        // Local Network - Android 17+
+        // -----------------------------------------------------
+
+        if (Build.VERSION.SDK_INT >= 37) {
+
+            if (!granted(
+                    LOCAL_NETWORK_PERMISSION
+            )) {
+
+                return false;
+            }
+        }
+
 
         return true;
     }
+
+
+    // =========================================================
+    // REQUEST NEARBY PERMISSIONS
+    //
+    // NOTE:
+    // MainActivity now handles the single permission request.
+    // This method is kept here for compatibility but should
+    // NOT be called from MainActivity anymore.
+    // =========================================================
+
+    public void requestNearbyPermissions() {
+
+        ArrayList<String> permissions =
+                new ArrayList<>();
+
+
+        // Android 11 and below
+        if (Build.VERSION.SDK_INT <= 31) {
+
+            permissions.add(
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            );
+
+            permissions.add(
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+            );
+        }
+
+
+        // Android 12+
+        if (Build.VERSION.SDK_INT >= 31) {
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_SCAN
+            );
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_CONNECT
+            );
+
+            permissions.add(
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+            );
+        }
+
+
+        // Android 13+
+        if (Build.VERSION.SDK_INT >= 33) {
+
+            permissions.add(
+                    Manifest.permission.NEARBY_WIFI_DEVICES
+            );
+        }
+
+
+        // Android 17+
+        if (Build.VERSION.SDK_INT >= 37) {
+
+            permissions.add(
+                    LOCAL_NETWORK_PERMISSION
+            );
+        }
+
+
+        if (permissions.isEmpty()) {
+
+            return;
+        }
+
+
+        ActivityCompat.requestPermissions(
+                activity,
+                permissions.toArray(
+                        new String[0]
+                ),
+                200
+        );
+    }
+
+
+    // =========================================================
+    // RECEIVE PAYLOAD
+    // =========================================================
+
     private final PayloadCallback payloadCallback =
             new PayloadCallback() {
 
                 @Override
-                public void onPayloadReceived(String endpointId, Payload payload) {
+                public void onPayloadReceived(
+                        String endpointId,
+                        Payload payload
+                ) {
 
-                    if (payload.getType() != Payload.Type.BYTES) {
+                    // We only handle byte payloads
+                    if (payload.getType()
+                            != Payload.Type.BYTES) {
+
                         return;
                     }
 
-                    String json = new String(payload.asBytes());
 
-                    Gson gson = new Gson();
+                    byte[] bytes =
+                            payload.asBytes();
+
+
+                    if (bytes == null) {
+
+                        return;
+                    }
+
+
+                    // Convert bytes → JSON
+                    String json =
+                            new String(
+                                    bytes,
+                                    StandardCharsets.UTF_8
+                            );
+
 
                     try {
 
-                        SOSPacket packet = gson.fromJson(json, SOSPacket.class);
-
-                        String messageId = packet.getMessageId();
-
-                        // Check whether we have already seen this SOS
-                        android.content.SharedPreferences prefs =
-                                activity.getSharedPreferences(
-                                        "ResQNet",
-                                        android.content.Context.MODE_PRIVATE
+                        // JSON → SOSPacket
+                        SOSPacket packet =
+                                gson.fromJson(
+                                        json,
+                                        SOSPacket.class
                                 );
 
-                        String seenKey = "seen_" + messageId;
 
-                        if (prefs.getBoolean(seenKey, false)) {
+                        // Validate packet
+                        if (packet == null
+                                || packet.getMessageId() == null) {
 
-                            Toast.makeText(
-                                    activity,
-                                    "Duplicate SOS ignored",
+                            toast(
+                                    "Invalid SOS packet",
                                     Toast.LENGTH_SHORT
-                            ).show();
+                            );
 
                             return;
                         }
 
-                        // Mark this SOS as seen
+
+                        SharedPreferences prefs =
+                                prefs();
+
+
+                        String seenKey =
+                                "seen_" +
+                                        packet.getMessageId();
+
+
+                        // =================================================
+                        // DUPLICATE CHECK
+                        // =================================================
+
+                        if (prefs.getBoolean(
+                                seenKey,
+                                false
+                        )) {
+
+                            toast(
+                                    "Duplicate SOS ignored",
+                                    Toast.LENGTH_SHORT
+                            );
+
+                            return;
+                        }
+
+
+                        // =================================================
+                        // MARK MESSAGE AS SEEN
+                        // =================================================
+
                         prefs.edit()
-                                .putBoolean(seenKey, true)
+                                .putBoolean(
+                                        seenKey,
+                                        true
+                                )
                                 .apply();
 
-                        // Increase hop count
+
+                        // =================================================
+                        // INCREASE HOP COUNT
+                        // =================================================
+
                         packet.incrementHopCount();
 
-                        // Store received SOS locally
-                        String updatedJson = gson.toJson(packet);
+
+                        // =================================================
+                        // STORE SOS LOCALLY
+                        // =================================================
 
                         prefs.edit()
-                                .putString("sos_packet", updatedJson)
+                                .putString(
+                                        "sos_packet",
+                                        gson.toJson(packet)
+                                )
                                 .apply();
 
-                        Toast.makeText(
-                                activity,
+
+                        // =================================================
+                        // SHOW RECEIVED SOS
+                        // =================================================
+
+                        toast(
                                 "SOS received! Hop: "
                                         + packet.getHopCount(),
                                 Toast.LENGTH_LONG
-                        ).show();
+                        );
 
-                        // Forward to other connected devices
-                        forwardSOS(packet, endpointId);
+
+                        // =================================================
+                        // FORWARD SOS
+                        // =================================================
+
+                        forwardSOS(
+                                packet,
+                                endpointId
+                        );
+
 
                     } catch (Exception e) {
 
-                        Toast.makeText(
-                                activity,
+                        toast(
                                 "Invalid SOS packet",
                                 Toast.LENGTH_SHORT
-                        ).show();
+                        );
                     }
                 }
+
 
                 @Override
                 public void onPayloadTransferUpdate(
                         String endpointId,
-                        PayloadTransferUpdate update) {
+                        PayloadTransferUpdate update
+                ) {
+
+                    // Not required for BYTES payloads
                 }
             };
+
+
+    // =========================================================
+    // ENDPOINT DISCOVERY
+    // =========================================================
+
     private final EndpointDiscoveryCallback endpointDiscoveryCallback =
             new EndpointDiscoveryCallback() {
 
                 @Override
                 public void onEndpointFound(
                         String endpointId,
-                        DiscoveredEndpointInfo info) {
+                        DiscoveredEndpointInfo info
+                ) {
 
-                    Toast.makeText(
-                            activity,
+                    // Already connected?
+                    if (connectedEndpoints.contains(
+                            endpointId
+                    )) {
+
+                        return;
+                    }
+
+
+                    // Connection request already running?
+                    if (pendingEndpoints.contains(
+                            endpointId
+                    )) {
+
+                        return;
+                    }
+
+
+                    // Mark request as pending
+                    pendingEndpoints.add(
+                            endpointId
+                    );
+
+
+                    toast(
                             "ResQNet device found",
                             Toast.LENGTH_SHORT
-                    ).show();
-
-                    connectionsClient.requestConnection(
-                            "ResQNet Device",
-                            endpointId,
-                            connectionLifecycleCallback
                     );
+
+
+                    // Request connection
+                    connectionsClient.requestConnection(
+                                    "ResQNet Device",
+                                    endpointId,
+                                    connectionLifecycleCallback
+                            )
+                            .addOnFailureListener(e -> {
+
+                                pendingEndpoints.remove(
+                                        endpointId
+                                );
+
+                            });
                 }
+
 
                 @Override
-                public void onEndpointLost(String endpointId) {
+                public void onEndpointLost(
+                        String endpointId
+                ) {
 
-                    Toast.makeText(
-                            activity,
+                    pendingEndpoints.remove(
+                            endpointId
+                    );
+
+
+                    toast(
                             "ResQNet device lost",
                             Toast.LENGTH_SHORT
-                    ).show();
+                    );
                 }
             };
+
+
+    // =========================================================
+    // START ADVERTISING
+    // =========================================================
+
     public void startAdvertising() {
 
-        AdvertisingOptions advertisingOptions =
+        AdvertisingOptions options =
                 new AdvertisingOptions.Builder()
-                        .setStrategy(Strategy.P2P_CLUSTER)
+                        .setStrategy(
+                                Strategy.P2P_CLUSTER
+                        )
                         .build();
+
 
         connectionsClient.startAdvertising(
                         "ResQNet Device",
                         SERVICE_ID,
                         connectionLifecycleCallback,
-                        advertisingOptions
+                        options
                 )
-                .addOnSuccessListener(unused -> {
+                .addOnSuccessListener(
+                        unused -> {
 
-                    // Advertising started successfully
+                            toast(
+                                    "ResQNet advertising started",
+                                    Toast.LENGTH_SHORT
+                            );
+                        }
+                )
+                .addOnFailureListener(
+                        e -> {
 
-                })
-                .addOnFailureListener(e -> {
-
-                    // Advertising failed
-
-                });
+                            toast(
+                                    "Advertising failed: "
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
+                );
     }
+
+
+    // =========================================================
+    // START DISCOVERY
+    // =========================================================
+
     public void startDiscovery() {
 
-        DiscoveryOptions discoveryOptions =
+        DiscoveryOptions options =
                 new DiscoveryOptions.Builder()
-                        .setStrategy(Strategy.P2P_CLUSTER)
+                        .setStrategy(
+                                Strategy.P2P_CLUSTER
+                        )
                         .build();
+
 
         connectionsClient.startDiscovery(
                         SERVICE_ID,
                         endpointDiscoveryCallback,
-                        discoveryOptions
+                        options
                 )
-                .addOnSuccessListener(unused -> {
+                .addOnSuccessListener(
+                        unused -> {
 
-                    Toast.makeText(
-                            activity,
-                            "ResQNet discovery started",
-                            Toast.LENGTH_SHORT
-                    ).show();
+                            toast(
+                                    "ResQNet discovery started",
+                                    Toast.LENGTH_SHORT
+                            );
+                        }
+                )
+                .addOnFailureListener(
+                        e -> {
 
-                })
-                .addOnFailureListener(e -> {
+                            android.util.Log.e(
+                                    "ResQNet",
+                                    "Discovery failed",
+                                    e
+                            );
 
-                    Toast.makeText(
-                            activity,
-                            "Discovery failed: " + e.getMessage(),
-                            Toast.LENGTH_LONG
-                    ).show();
 
-                });
+                            toast(
+                                    "Discovery failed: "
+                                            + e.getMessage(),
+                                    Toast.LENGTH_LONG
+                            );
+                        }
+                );
     }
+
+
+    // =========================================================
+    // STOP EVERYTHING
+    // =========================================================
+
+    public void stopAll() {
+
+        connectionsClient.stopAdvertising();
+
+        connectionsClient.stopDiscovery();
+
+        connectionsClient.stopAllEndpoints();
+
+
+        connectedEndpoints.clear();
+
+        pendingEndpoints.clear();
+    }
+
+
+    // =========================================================
+    // CONNECTION LIFECYCLE
+    // =========================================================
+
     private final ConnectionLifecycleCallback connectionLifecycleCallback =
             new ConnectionLifecycleCallback() {
 
                 @Override
                 public void onConnectionInitiated(
                         String endpointId,
-                        ConnectionInfo connectionInfo) {
+                        ConnectionInfo connectionInfo
+                ) {
 
+                    // Automatically accept connection
                     connectionsClient.acceptConnection(
                             endpointId,
                             payloadCallback
                     );
                 }
 
+
                 @Override
                 public void onConnectionResult(
                         String endpointId,
-                        ConnectionResolution result) {
+                        ConnectionResolution result
+                ) {
 
-                    if (result.getStatus().getStatusCode()
-                            == ConnectionsStatusCodes.STATUS_OK) {
+                    // Request is no longer pending
+                    pendingEndpoints.remove(
+                            endpointId
+                    );
 
-                        Toast.makeText(
-                                activity,
+
+                    int code =
+                            result.getStatus()
+                                    .getStatusCode();
+
+
+                    // =================================================
+                    // CONNECTION SUCCESS
+                    // =================================================
+
+                    if (code ==
+                            ConnectionsStatusCodes.STATUS_OK) {
+
+
+                        // VERY IMPORTANT:
+                        // Store connected endpoint
+                        connectedEndpoints.add(
+                                endpointId
+                        );
+
+
+                        toast(
                                 "ResQNet device connected",
                                 Toast.LENGTH_SHORT
-                        ).show();
+                        );
+                    }
 
-                        Payload payload =
-                                Payload.fromBytes("HELLO FROM RESQNET".getBytes());
 
-                        connectionsClient.sendPayload(endpointId, payload);
-                    }else {
+                    // =================================================
+                    // ALREADY CONNECTED
+                    // =================================================
 
-                        Toast.makeText(
-                                activity,
+                    else if (
+                            code ==
+                                    ConnectionsStatusCodes
+                                            .STATUS_ALREADY_CONNECTED_TO_ENDPOINT
+                    ) {
+
+                        connectedEndpoints.add(
+                                endpointId
+                        );
+                    }
+
+
+                    // =================================================
+                    // CONNECTION FAILED
+                    // =================================================
+
+                    else {
+
+                        toast(
                                 "Connection failed",
                                 Toast.LENGTH_SHORT
-                        ).show();
+                        );
                     }
                 }
 
+
                 @Override
-                public void onDisconnected(String endpointId) {
+                public void onDisconnected(
+                        String endpointId
+                ) {
 
-                    connectedEndpoints.remove(endpointId);
+                    // Remove disconnected device
+                    connectedEndpoints.remove(
+                            endpointId
+                    );
 
-                    Toast.makeText(
-                            activity,
+
+                    pendingEndpoints.remove(
+                            endpointId
+                    );
+
+
+                    toast(
                             "ResQNet device disconnected",
                             Toast.LENGTH_SHORT
-                    ).show();
+                    );
                 }
             };
-    public void requestNearbyPermissions() {
 
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
 
-            ActivityCompat.requestPermissions(
-                    activity,
-                    new String[]{
-                            Manifest.permission.BLUETOOTH_SCAN,
-                            Manifest.permission.BLUETOOTH_CONNECT,
-                            Manifest.permission.BLUETOOTH_ADVERTISE,
-                            Manifest.permission.NEARBY_WIFI_DEVICES
-                    },
-                    200
-            );
-        }
-    }
+    // =========================================================
+    // FORWARD SOS
+    // =========================================================
 
-    private void forwardSOS(SOSPacket packet, String receivedFromEndpoint) {
+    private void forwardSOS(
+            SOSPacket packet,
+            String receivedFromEndpoint
+    ) {
 
-        Gson gson = new Gson();
+        // Convert packet → JSON → bytes
+        Payload payload =
+                Payload.fromBytes(
+                        gson.toJson(packet)
+                                .getBytes(
+                                        StandardCharsets.UTF_8
+                                )
+                );
 
-        String json = gson.toJson(packet);
 
-        Payload payload = Payload.fromBytes(
-                json.getBytes()
-        );
+        // Send to every connected device
+        for (String endpointId :
+                connectedEndpoints) {
 
-        for (String endpointId : connectedEndpoints) {
 
-            // Don't immediately send it back to the phone
-            // that sent it to us.
-            if (endpointId.equals(receivedFromEndpoint)) {
+            // IMPORTANT:
+            // Don't immediately send it back
+            // to the phone that sent it.
+            if (endpointId.equals(
+                    receivedFromEndpoint
+            )) {
+
                 continue;
             }
+
 
             connectionsClient.sendPayload(
                     endpointId,
@@ -345,33 +750,72 @@ public class NearbyManager {
             );
         }
 
-        Toast.makeText(
-                activity,
-                "SOS forwarded. Hop: " + packet.getHopCount(),
+
+        toast(
+                "SOS forwarded. Hop: "
+                        + packet.getHopCount(),
                 Toast.LENGTH_SHORT
-        ).show();
+        );
     }
-    public void sendSOS(SOSPacket packet) {
 
-        Gson gson = new Gson();
 
-        String json = gson.toJson(packet);
+    // =========================================================
+    // SEND ORIGINAL SOS
+    // =========================================================
 
-        Payload payload =
-                Payload.fromBytes(json.getBytes());
+    public void sendSOS(
+            SOSPacket packet
+    ) {
 
+
+        // No connected devices
         if (connectedEndpoints.isEmpty()) {
 
-            Toast.makeText(
-                    activity,
+            toast(
                     "No ResQNet devices connected",
                     Toast.LENGTH_SHORT
-            ).show();
+            );
 
             return;
         }
 
-        for (String endpointId : connectedEndpoints) {
+
+        // =====================================================
+        // MARK OUR OWN SOS AS SEEN
+        // =====================================================
+
+        if (packet.getMessageId() != null) {
+
+            prefs()
+                    .edit()
+                    .putBoolean(
+                            "seen_" +
+                                    packet.getMessageId(),
+                            true
+                    )
+                    .apply();
+        }
+
+
+        // =====================================================
+        // CREATE PAYLOAD
+        // =====================================================
+
+        Payload payload =
+                Payload.fromBytes(
+                        gson.toJson(packet)
+                                .getBytes(
+                                        StandardCharsets.UTF_8
+                                )
+                );
+
+
+        // =====================================================
+        // SEND TO ALL CONNECTED DEVICES
+        // =====================================================
+
+        for (String endpointId :
+                connectedEndpoints) {
 
             connectionsClient.sendPayload(
                     endpointId,
@@ -379,10 +823,40 @@ public class NearbyManager {
             );
         }
 
-        Toast.makeText(
-                activity,
+
+        toast(
                 "SOS sent to nearby devices",
                 Toast.LENGTH_SHORT
+        );
+    }
+
+
+    // =========================================================
+    // SHARED PREFERENCES
+    // =========================================================
+
+    private SharedPreferences prefs() {
+
+        return activity.getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+        );
+    }
+
+
+    // =========================================================
+    // TOAST HELPER
+    // =========================================================
+
+    private void toast(
+            String msg,
+            int length
+    ) {
+
+        Toast.makeText(
+                activity,
+                msg,
+                length
         ).show();
     }
 }
